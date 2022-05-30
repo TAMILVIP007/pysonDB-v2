@@ -68,7 +68,6 @@ def print_db_as_table(data: NewDataType) -> Tuple[str, int]:
 
 def merge_n_db(*dbs: DBSchemaType) -> Tuple[DBSchemaType, str, int]:
     keys: List[str] = []
-    new_db: DBSchemaType = {}
     data: Dict[str, SingleDataType] = {}
     for db in dbs:
         if isinstance(db['keys'], list):
@@ -80,12 +79,9 @@ def merge_n_db(*dbs: DBSchemaType) -> Tuple[DBSchemaType, str, int]:
         if isinstance(db['data'], dict):
             data = {**data, **db['data']}
 
-    new_db['version'] = 2
-    new_db['keys'] = keys
-    new_db['data'] = data
+    new_db: DBSchemaType = {'version': 2, 'keys': keys, 'data': data}
     return new_db, '', 0
 
 
 def purge_db(_: Any) -> DBSchemaType:
-    data: DBSchemaType = {'version': 2, 'keys': [], 'data': {}}
-    return data
+    return {'version': 2, 'keys': [], 'data': {}}

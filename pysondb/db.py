@@ -38,14 +38,10 @@ class PysonDB:
         self._gen_db_file()
 
     def _load_file(self) -> DBSchemaType:
-        if self.auto_update:
-            with open(self.filename, encoding='utf-8', mode='r') as f:
-                if UJSON:
-                    return ujson.load(f)
-                else:
-                    return json.load(f)
-        else:
+        if not self.auto_update:
             return deepcopy(self._au_memory)
+        with open(self.filename, encoding='utf-8', mode='r') as f:
+            return ujson.load(f) if UJSON else json.load(f)
 
     def _dump_file(self, data: DBSchemaType) -> None:
         if self.auto_update:
@@ -59,13 +55,12 @@ class PysonDB:
         return None
 
     def _gen_db_file(self) -> None:
-        if self.auto_update:
-            if not Path(self.filename).is_file():
-                self.lock.acquire()
-                self._dump_file(
-                    {'version': 2, 'keys': [], 'data': {}}
-                )
-                self.lock.release()
+        if self.auto_update and not Path(self.filename).is_file():
+            self.lock.acquire()
+            self._dump_file(
+                {'version': 2, 'keys': [], 'data': {}}
+            )
+            self.lock.release()
 
     def _gen_id(self) -> str:
         # generates a random 18 digit uuid
@@ -102,12 +97,11 @@ class PysonDB:
                     f"keys must of type 'list' and not {type(keys)}")
             if len(keys) == 0:
                 db_data['keys'] = sorted(list(data.keys()))
-            else:
-                if not sorted(keys) == sorted(data.keys()):
-                    raise UnknownKeyError(
-                        f'Unrecognized / missing key(s) {set(keys) ^ set(data.keys())}'
-                        '(Either the key(s) does not exists in the DB or is missing in the given data)'
-                    )
+            elif sorted(keys) != sorted(data.keys()):
+                raise UnknownKeyError(
+                    f'Unrecognized / missing key(s) {set(keys) ^ set(data.keys())}'
+                    '(Either the key(s) does not exists in the DB or is missing in the given data)'
+                )
 
             _id = str(self._id_generator())
             if not isinstance(db_data['data'], dict):
@@ -145,7 +139,7 @@ class PysonDB:
                     f"keys must of type 'list' and not {type(keys)}")
 
             for d in data:
-                if not sorted(keys) == sorted(d.keys()):
+                if sorted(keys) != sorted(d.keys()):
                     raise UnknownKeyError(
                         f'Unrecognized / missing key(s) {set(keys) ^ set(d.keys())}'
                         '(Either the key(s) does not exists in the DB or is missing in the given data)'
@@ -198,9 +192,8 @@ class PysonDB:
             data = self._load_file()['data']
             if isinstance(data, dict):
                 for id, values in data.items():
-                    if isinstance(values, dict):
-                        if query(values):
-                            new_data[id] = values
+                    if isinstance(values, dict) and query(values):
+                        new_data[id] = values
 
             return new_data
 
@@ -213,10 +206,9 @@ class PysonDB:
             data = self._load_file()
             keys = data['keys']
 
-            if isinstance(keys, list):
-                if not all(i in keys for i in new_data):
-                    raise UnknownKeyError(
-                        f'Unrecognized key(s) {[i for i in new_data if i not in keys]}')
+            if isinstance(keys, list) and any(i not in keys for i in new_data):
+                raise UnknownKeyError(
+                    f'Unrecognized key(s) {[i for i in new_data if i not in keys]}')
 
             if not isinstance(data['data'], dict):
                 raise SchemaTypeError(
@@ -245,10 +237,9 @@ class PysonDB:
             db_data = self._load_file()
             keys = db_data['keys']
 
-            if isinstance(keys, list):
-                if not all(i in keys for i in new_data):
-                    raise UnknownKeyError(
-                        f'Unrecognized / missing key(s) {[i for i in new_data if i not in keys]}')
+            if isinstance(keys, list) and any(i not in keys for i in new_data):
+                raise UnknownKeyError(
+                    f'Unrecognized / missing key(s) {[i for i in new_data if i not in keys]}')
 
             if not isinstance(db_data['data'], dict):
                 raise SchemaTypeError(
@@ -284,10 +275,7 @@ class PysonDB:
             if not isinstance(data['data'], dict):
                 raise SchemaTypeError(
                     '"data" key in the DB must be of type dict')
-            ids_to_delete = []
-            for id, value in data['data'].items():
-                if query(value):
-                    ids_to_delete.append(id)
+            ids_to_delete = [id for id, value in data['data'].items() if query(value)]
             for id in ids_to_delete:
                 del data['data'][id]
 
@@ -309,10 +297,11 @@ class PysonDB:
 
     def add_new_key(self, key: str, default: Optional[NewKeyValidTypes] = None) -> None:
 
-        if default is not None:
-            if not isinstance(default, (list, str, int, bool, dict)):
-                raise TypeError(
-                    f'default field must be of any of (list, int, str, bool, dict) but for {type(default)}')
+        if default is not None and not isinstance(
+            default, (list, str, int, bool, dict)
+        ):
+            raise TypeError(
+                f'default field must be of any of (list, int, str, bool, dict) but for {type(default)}')
 
         with self.lock:
             data = self._load_file()

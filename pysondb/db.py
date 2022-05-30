@@ -275,7 +275,8 @@ class PysonDB:
             if not isinstance(data['data'], dict):
                 raise SchemaTypeError(
                     '"data" key in the DB must be of type dict')
-            ids_to_delete = [id for id, value in data['data'].items() if query(value)]
+            ids_to_delete = [id for id,
+                             value in data['data'].items() if query(value)]
             for id in ids_to_delete:
                 del data['data'][id]
 
